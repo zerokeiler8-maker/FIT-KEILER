@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>IronTracker V11.1 - Turbo Speed</title>
+    
+    <link rel="icon" type="image/png" href="https://img.icons8.com/external-tal-revivo-bold-tal-revivo/48/bef264/external-graphite-an-allotrope-of-carbon-used-in-pencils-and-as-a-lubricant-industrial-bold-tal-revivo.png">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/external-tal-revivo-bold-tal-revivo/180/bef264/external-graphite-an-allotrope-of-carbon-used-in-pencils-and-as-a-lubricant-industrial-bold-tal-revivo.png">
+    <meta name="theme-color" content="#050505">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <style>
+        :root { --bg: #050505; --card: #121212; --accent: #bef264; }
+        body { background-color: var(--bg); color: white; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        .exercise-card { background-color: var(--card); border: 1px solid #222; border-radius: 20px; contain: content; }
+        .active-day { border-bottom: 3px solid var(--accent); color: white !important; }
+        .collapse-content { display: none; }
+        .collapse-content.is-open { display: block; }
+        .serie-dot {
+            width: 38px; height: 38px; border-radius: 12px;
+            background: #1a1a1a; border: 1px solid #333;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: bold; color: #555; transition: 0.2s;
+        }
+        .serie-dot.active { background: var(--accent); color: black; border-color: var(--accent); }
+        
+        /* Cronómetro inferior mejorado */
+        #rest-timer { transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); border-radius: 30px 30px 0 0; }
+        #rest-timer.show { transform: translateY(0); display: block !important; }
+        
+        .rpe-btn { padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; border: 1px solid #333; color: #666; }
+        .rpe-btn.selected { background: #333; color: var(--accent); border-color: var(--accent); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* Panel Lateral de Gráficas */
+        #stats-panel { transform: translateX(100%); transition: transform 0.4s ease; background: black; z-index: 100; }
+        #stats-panel.open { transform: translateX(0); }
+        
+        /* Animación Récord Personal */
+        .pr-crown { color: #ffd700; font-size: 10px; animation: bounce 1.2s infinite ease-in-out; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+    </style>
+</head>
+<body class="pb-40">
+
+    <div id="lightbox" class="fixed inset-0 hidden items-center justify-center p-4 bg-black/95 z-[100]" onclick="closeLightbox()">
+        <div id="lightbox-content" class="max-w-full max-h-[80vh]" onclick="event.stopPropagation()"></div>
+    </div>
+
+    <div id="stats-panel" class="fixed inset-0 p-6 overflow-y-auto no-scrollbar">
+        <div class="flex justify-between items-center mb-8 sticky top-0 bg-black py-2 z-10">
+            <h2 class="text-xl font-black italic text-[#bef264] uppercase tracking-tighter">Historial de Cargas</h2>
+            <button onclick="toggleStats()" class="text-3xl">&times;</button>
+        </div>
+        <div id="stats-content" class="space-y-6"></div>
+    </div>
+
+    <div id="rest-timer" class="fixed bottom-0 left-0 right-0 bg-[#bef264] text-black p-6 z-50 shadow-2xl hidden">
+        <div class="flex justify-between items-center mb-4">
+            <div>
+                <p class="text-[10px] font-black uppercase opacity-60">Descanso activo</p>
+                <div class="flex items-center gap-4">
+                    <button onclick="adjustTime(-10)" class="bg-black/5 w-8 h-8 rounded-full font-bold">-</button>
+                    <p id="timer-num" class="font-black text-4xl tracking-tighter">00:40</p>
+                    <button onclick="adjustTime(10)" class="bg-black/5 w-8 h-8 rounded-full font-bold">+</button>
+                </div>
+            </div>
+            <button onclick="stopTimer()" class="bg-black text-[#bef264] px-6 py-3 rounded-2xl text-[11px] font-black uppercase">Omitir</button>
+        </div>
+        <div class="w-full h-1.5 bg-black/10 rounded-full overflow-hidden">
+            <div id="timer-progress" class="h-full bg-black w-full transition-all duration-1000 linear"></div>
+        </div>
+    </div>
+
+    <header class="p-4 sticky top-0 bg-[#050505]/90 backdrop-blur-xl z-40 border-b border-zinc-900">
+        <div class="flex flex-col gap-4">
+            <div class="flex justify-between items-center">
+                <h1 class="text-xl font-black italic uppercase tracking-tighter text-[#bef264]">Graphite<span class="text-white text-[10px] ml-1 opacity-40">V11.1</span></h1>
+                <div class="flex gap-2">
+                    <button onclick="toggleStats()" class="bg-zinc-800 p-2.5 rounded-xl text-xs text-blue-400 border border-zinc-900"><i class="fa-solid fa-chart-line"></i></button>
+                    <button onclick="clearAllData()" class="bg-zinc-800 p-2.5 rounded-xl text-xs text-red-400 border border-zinc-900"><i class="fa-solid fa-broom"></i></button>
+                    <button id="focus-btn" onclick="toggleWakeLock()" class="bg-zinc-800 p-2.5 rounded-xl text-xs text-zinc-500 border border-zinc-900"><i class="fa-solid fa-bolt"></i></button>
+                    <button onclick="exportBackup()" class="bg-zinc-800 p-2.5 rounded-xl text-xs"><i class="fa-solid fa-download"></i></button>
+                    <button onclick="document.getElementById('importInput').click()" class="bg-zinc-800 p-2.5 rounded-xl text-xs"><i class="fa-solid fa-upload"></i></button>
+                    <button onclick="saveAll()" class="bg-[#bef264] text-black font-black px-5 py-2.5 rounded-xl text-xs">GUARDAR</button>
+                </div>
+            </div>
+            <input type="file" id="importInput" class="hidden" onchange="importBackup(this)">
+            
+            <div class="flex items-center gap-2">
+                <div class="flex-1 h-1 bg-zinc-900 rounded-full">
+                    <div id="storage-bar" class="h-full bg-blue-500 w-0"></div>
+                </div>
+                <span id="storage-text" class="text-[7px] font-bold text-zinc-600 uppercase">Procesando...</span>
+            </div>
+
+            <nav class="flex gap-7 overflow-x-auto no-scrollbar border-t border-zinc-900 pt-3">
+                <button onclick="switchDay('jueves', this)" class="day-btn pb-2 text-zinc-500 font-black text-[10px] active-day uppercase tracking-widest">Jueves</button>
+                <button onclick="switchDay('viernes', this)" class="day-btn pb-2 text-zinc-500 font-black text-[10px] uppercase tracking-widest">Viernes</button>
+                <button onclick="switchDay('sabado', this)" class="day-btn pb-2 text-zinc-500 font-black text-[10px] uppercase tracking-widest">Sábado</button>
+                <button onclick="switchDay('domingo', this)" class="day-btn pb-2 text-zinc-500 font-black text-[10px] uppercase tracking-widest">Domingo</button>
+            </nav>
+        </div>
+    </header>
+
+    <main id="app-container" class="p-4 space-y-6"></main>
+
+    <script>
+        const dbName = "IronTrackerDB";
+        let db, gymData = {}, currentDay = 'jueves';
+        let openSections = JSON.parse(localStorage.getItem('open_sections')) || {};
+        let timerInterval, remainingTime, totalDuration, wakeLock = null;
+
+        const request = indexedDB.open(dbName, 1);
+        request.onupgradeneeded = (e) => { e.target.result.createObjectStore("workoutData"); };
+        request.onsuccess = (e) => { db = e.target.result; loadFromDB(); };
+
+        function loadFromDB() {
+            const store = db.transaction(["workoutData"], "readonly").objectStore("workoutData");
+            const getReq = store.get("currentWorkout");
+            getReq.onsuccess = () => {
+                gymData = getReq.result || {
+                    jueves: [{ muscle: "CORE", exercises: []}, { muscle: "ABDOMINALES", exercises: []}],
+                    viernes: [{ muscle: "PIERNAS", exercises: []}],
+                    sabado: [{ muscle: "PECHO", exercises: [] }, { muscle: "HOMBROS", exercises: [] }, { muscle: "TRICEPS", exercises: [] }],
+                    domingo: [{ muscle: "ESPALDA", exercises: []}, { muscle: "BICEPS", exercises: []}]
+                };
+                render();
+            };
+        }
+
+        // LÓGICA DE RÉCORD PERSONAL Y SEMANAS
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        }
+
+        function getPersonalRecord(ex) {
+            if (!ex.weeklyHistory || Object.keys(ex.weeklyHistory).length === 0) return 0;
+            return Math.max(...Object.values(ex.weeklyHistory).map(v => parseFloat(v) || 0));
+        }
+
+        function saveAll() {
+            const weekLabel = `Sem ${getWeekNumber(new Date())}`;
+            Object.values(gymData).forEach(day => {
+                day.forEach(sec => {
+                    sec.exercises.forEach(ex => {
+                        if(ex.weight && parseFloat(ex.weight) > 0) {
+                            if(!ex.weeklyHistory) ex.weeklyHistory = {};
+                            const currentW = parseFloat(ex.weight);
+                            const lastW = parseFloat(ex.weeklyHistory[weekLabel]) || 0;
+                            if(currentW > lastW) ex.weeklyHistory[weekLabel] = ex.weight;
+                        }
+                    });
+                });
+            });
+            const store = db.transaction(["workoutData"], "readwrite").objectStore("workoutData");
+            store.put(gymData, "currentWorkout");
+            alert("✅ Sincronizado");
+            updateStorageUI();
+            render();
+        }
+
+        function toggleStats() {
+            const panel = document.getElementById('stats-panel');
+            const isOpen = panel.classList.toggle('open');
+            if(!isOpen) return;
+
+            let html = "";
+            Object.values(gymData).forEach(day => {
+                day.forEach(sec => {
+                    sec.exercises.forEach(ex => {
+                        if(ex.weeklyHistory && Object.keys(ex.weeklyHistory).length > 1) {
+                            const cid = `chart-${ex.name.replace(/\s+/g, '')}`;
+                            html += `<div class="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
+                                <p class="text-[10px] font-black text-zinc-500 uppercase mb-4 tracking-widest">${ex.name}</p>
+                                <div style="height:150px"><canvas id="${cid}"></canvas></div>
+                            </div>`;
+                            setTimeout(() => {
+                                const ctx = document.getElementById(cid).getContext('2d');
+                                new Chart(ctx, {
+                                    type: 'line',
+                                    data: {
+                                        labels: Object.keys(ex.weeklyHistory),
+                                        datasets: [{
+                                            data: Object.values(ex.weeklyHistory),
+                                            borderColor: '#bef264',
+                                            backgroundColor: 'rgba(190, 242, 100, 0.05)',
+                                            tension: 0.4,
+                                            fill: true,
+                                            borderWidth: 2,
+                                            pointRadius: 2
+                                        }]
+                                    },
+                                    options: { 
+                                        responsive: true, maintainAspectRatio: false, 
+                                        plugins: { legend: { display: false } },
+                                        scales: { y: { display: false }, x: { ticks: { color: '#444', font: { size: 8 } }, grid: { display: false } } }
+                                    }
+                                });
+                            }, 100);
+                        }
+                    });
+                });
+            });
+            document.getElementById('stats-content').innerHTML = html || "<p class='text-center opacity-20 text-xs py-20 italic font-black'>HISTORIAL VACÍO</p>";
+        }
+
+        function render() {
+            const container = document.getElementById('app-container');
+            container.innerHTML = '';
+            updateStorageUI();
+            
+            gymData[currentDay].forEach((section, sIdx) => {
+                const isOpen = openSections[`${currentDay}-${section.muscle}`];
+                let sectionHTML = `<div class="border-b border-zinc-800 pb-2"><button onclick="toggleSection('${section.muscle}')" class="w-full flex justify-between items-center py-2 uppercase tracking-widest text-[#bef264] font-black text-[11px]">${section.muscle} <i class="fa-solid ${isOpen ? 'fa-chevron-up' : 'fa-chevron-down'} opacity-40 text-[9px]"></i></button><div class="collapse-content ${isOpen ? 'is-open' : ''} space-y-4 pt-4">`;
+                
+                section.exercises.forEach((ex, eIdx) => {
+                    const rpe = ex.rpe || 0;
+                    const pr = getPersonalRecord(ex);
+                    const isPR = parseFloat(ex.weight) > 0 && parseFloat(ex.weight) >= pr && pr > 0;
+
+                    const mediaContent = isOpen && ex.media ? 
+                        (ex.media.includes('video') ? `<video src="${ex.media}" class="w-full h-full object-cover" muted loop playsinline></video>` : `<img src="${ex.media}" class="w-full h-full object-cover" loading="lazy">`) 
+                        : `<div class="w-full h-full flex items-center justify-center text-zinc-800"><i class="fa-solid fa-play"></i></div>`;
+
+                    sectionHTML += `
+                        <div class="exercise-card p-5 flex flex-col gap-5 shadow-2xl">
+                            <div class="flex items-center gap-4">
+                                <div class="w-20 h-20 bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-800" onclick="openLightbox('${ex.media}')">
+                                    ${mediaContent}
+                                </div>
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <input type="text" value="${ex.name}" onchange="updateEx(${sIdx}, ${eIdx}, 'name', this.value)" class="bg-transparent font-black text-[13px] w-full outline-none uppercase text-white">
+                                        ${isPR ? '<span class="pr-crown"><i class="fa-solid fa-crown"></i></span>' : ''}
+                                    </div>
+                                    <div class="flex justify-between bg-zinc-900/50 p-1 rounded-lg border border-zinc-800">
+                                        ${[7, 8, 9, 10].map(v => `<button onclick="setRPE(${sIdx}, ${eIdx}, ${v})" class="rpe-btn ${rpe === v ? 'selected' : ''}">${v}</button>`).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <div class="flex-1 bg-zinc-800/30 rounded-xl px-4 py-2 border border-zinc-800/50 text-[10px] font-black tracking-tighter uppercase"><span class="text-zinc-600">KG</span> <input type="text" value="${ex.weight}" onchange="updateEx(${sIdx}, ${eIdx}, 'weight', this.value)" class="bg-transparent w-full outline-none"></div>
+                                <div class="flex-1 bg-zinc-800/30 rounded-xl px-4 py-2 border border-zinc-800/50 text-[10px] font-black tracking-tighter uppercase"><span class="text-zinc-600">REPS</span> <input type="text" value="${ex.reps}" onchange="updateEx(${sIdx}, ${eIdx}, 'reps', this.value)" class="bg-transparent w-full outline-none"></div>
+                            </div>
+                            <div class="flex justify-between items-center pt-2 border-t border-zinc-800/50">
+                                <div class="flex gap-2">${[1, 2, 3, 4, 5].map(n => `<button onclick="setSeries(${sIdx}, ${eIdx}, ${n})" class="serie-dot ${ex.series >= n ? 'active' : ''}">${n}</button>`).join('')}</div>
+                                <div class="flex gap-5 text-zinc-600 text-lg">
+                                    <label class="cursor-pointer"><i class="fa-solid fa-camera"></i><input type="file" accept="video/*,image/*" class="hidden" onchange="handleFile(this, ${sIdx}, ${eIdx})"></label>
+                                    <button onclick="removeEx(${sIdx}, ${eIdx})"><i class="fa-solid fa-trash-can"></i></button>
+                                </div>
+                            </div>
+                        </div>`;
+                });
+                sectionHTML += `<button onclick="addEx(${sIdx})" class="w-full py-4 border-2 border-dashed border-zinc-800 rounded-2xl text-zinc-800 text-[10px] font-black mt-2">+ AÑADIR</button></div></div>`;
+                container.innerHTML += sectionHTML;
+            });
+        }
+
+        // FUNCIONES DE CONTROL
+        function startTimer(s) { 
+            clearInterval(timerInterval); 
+            remainingTime = s; 
+            totalDuration = s; 
+            document.getElementById('rest-timer').classList.remove('hidden'); 
+            setTimeout(() => { document.getElementById('rest-timer').classList.add('show'); }, 50); 
+            timerInterval = setInterval(() => { 
+                remainingTime--; 
+                document.getElementById('timer-num').innerText = `00:${remainingTime.toString().padStart(2, '0')}`; 
+                document.getElementById('timer-progress').style.width = `${(remainingTime/totalDuration)*100}%`; 
+                if (remainingTime <= 0) stopTimer(); 
+            }, 1000); 
+        }
+        
+        function stopTimer() { clearInterval(timerInterval); document.getElementById('rest-timer').classList.remove('show'); setTimeout(() => document.getElementById('rest-timer').classList.add('hidden'), 500); }
+        function adjustTime(n) { remainingTime = Math.max(0, remainingTime + n); }
+        function toggleSection(m) { const key = `${currentDay}-${m}`; openSections[key] = !openSections[key]; localStorage.setItem('open_sections', JSON.stringify(openSections)); render(); }
+        function switchDay(day, btn) { currentDay = day; document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active-day')); btn.classList.add('active-day'); render(); }
+        function updateEx(s, e, f, v) { gymData[currentDay][s].exercises[e][f] = v; }
+        function setRPE(s, e, v) { gymData[currentDay][s].exercises[e].rpe = v; render(); }
+        function setSeries(s, e, n) { if(gymData[currentDay][s].exercises[e].series < n) { gymData[currentDay][s].exercises[e].series = n; startTimer(40); } else { gymData[currentDay][s].exercises[e].series = n-1; stopTimer(); } render(); }
+        function addEx(s) { gymData[currentDay][s].exercises.push({name: "NUEVO", weight: "", reps: "", series: 0, media: "", rpe: 0, weeklyHistory: {}}); render(); }
+        function removeEx(s, e) { if(confirm("¿Eliminar?")) { gymData[currentDay][s].exercises.splice(e, 1); render(); } }
+        function handleFile(i, s, e) { const r = new FileReader(); r.onload = (ev) => { gymData[currentDay][s].exercises[e].media = ev.target.result; render(); }; r.readAsDataURL(i.files[0]); }
+        function openLightbox(m) { if(!m) return; const lb = document.getElementById('lightbox'); lb.classList.replace('hidden', 'flex'); document.getElementById('lightbox-content').innerHTML = m.includes('video') ? `<video src="${m}" controls autoplay class="rounded-2xl max-h-[75vh] w-full"></video>` : `<img src="${m}" class="rounded-2xl max-h-[75vh]">`; }
+        function closeLightbox() { const v = document.querySelector('video'); if(v){v.pause();v.src="";} document.getElementById('lightbox').classList.replace('flex','hidden'); }
+        async function toggleWakeLock() { if ('wakeLock' in navigator) { try { if (wakeLock === null) { wakeLock = await navigator.wakeLock.request('screen'); document.getElementById('focus-btn').style.color = '#bef264'; } else { await wakeLock.release(); wakeLock = null; document.getElementById('focus-btn').style.color = '#71717a'; } } catch (err) {} } }
+        function clearAllData() { if(confirm("¿Limpiar todo?")) { indexedDB.deleteDatabase(dbName); localStorage.clear(); location.reload(); } }
+        function updateStorageUI() { if (navigator.storage && navigator.storage.estimate) { navigator.storage.estimate().then(est => { const used = (est.usage / 1024 / 1024).toFixed(1); document.getElementById('storage-bar').style.width = ((est.usage/est.quota)*100) + '%'; document.getElementById('storage-text').innerText = `Uso: ${used}MB / Fluidez: OK`; }); } }
+        function exportBackup() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(gymData)); const dl = document.createElement('a'); dl.setAttribute("href", dataStr); dl.setAttribute("download", "iron_backup.json"); dl.click(); }
+        function importBackup(input) { const r = new FileReader(); r.onload = (e) => { gymData = JSON.parse(e.target.result); saveAll(); render(); }; r.readAsText(input.files[0]); }
+    </script>
+</body>
+</html>
